@@ -1,0 +1,3 @@
+/home/rodrigo/Documents/code/PG/ProjetoGraficos/build/CMakeFiles/SistemaVisualizacaoGrafica.dir
+/home/rodrigo/Documents/code/PG/ProjetoGraficos/build/CMakeFiles/edit_cache.dir
+/home/rodrigo/Documents/code/PG/ProjetoGraficos/build/CMakeFiles/rebuild_cache.dir
