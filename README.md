@@ -42,25 +42,6 @@ Conceitos Implementados
     Plástico (baixo brilho especular)
     Padrão (brilho médio)
 
-Estrutura do Projeto
-
-ProjetoGraficos/
-├── src/
-│   ├── main.cpp           # Programa principal e loop de renderização
-│   ├── Shader.h           # Classe para gerenciar shaders GLSL
-│   ├── Camera.h           # Sistema de câmera FPS
-│   ├── Mesh.h             # Geometria e primitivas
-│   └── Light.h            # Estruturas de iluminação e materiais
-├── shaders/
-│   ├── vertexShader.glsl      # Vertex shader básico
-│   ├── fragmentShader.glsl    # Fragment shader básico
-│   ├── lightingVert.glsl      # Vertex shader com iluminação
-│   └── lightingFrag.glsl      # Fragment shader Phong
-├── glad/
-│   ├── include/glad/glad.h    # Cabeçalho GLAD
-│   └── src/glad.c             # Implementação GLAD
-├── CMakeLists.txt         # Configuração CMake
-└── README.md              # Esta documentação
 
 Dependências
 
@@ -261,7 +242,5 @@ Referências
 Licença
 
 Este projeto é desenvolvido para fins educacionais.
-Autor
 
-Desenvolvido como demonstração de conceitos de processamento gráfico.
 
