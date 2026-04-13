@@ -1,246 +1,109 @@
-Sistema de Visualização Gráfica 3D Interativo
-Visão Geral
+# Sistema de Visualização Gráfica 3D
 
-Este projeto demonstra domínio dos conceitos fundamentais de computação gráfica, implementando um sistema interativo de visualização 3D com iluminação avançada, câmera FPS e múltiplas geometrias.
-Conceitos Implementados
-1. Pipeline Gráfico Completo
+Projeto desenvolvido para a disciplina de Processamento Gráfico. Implementa um sistema interativo de visualização 3D com iluminação, câmera FPS e geometrias primitivas usando OpenGL 3.3.
 
-    Application Stage: Gerenciamento de entrada, física e lógica
-    Geometry Processing: Transformações de modelo, visão e projeção
-    Rasterization: Conversão de primitivas em fragmentos
-    Pixel Processing: Cálculos de iluminação por fragmento
+## O que está implementado
 
-2. Transformações 3D
+- Pipeline gráfico completo (vertex/fragment shaders)
+- Transformações 3D com matrizes modelo, visão e projeção
+- Iluminação Phong (luz direcional + pontuais com atenuação)
+- Câmera FPS com movimento WASD e controle por mouse
+- Geometrias procedurais: cubo, esfera e plano
+- Sistema de materiais (metálico, plástico, padrão)
+- Toggle de wireframe e iluminação em tempo real
 
-    Matriz Modelo: Posicionamento e orientação de objetos no mundo
-    Matriz Visão: Câmera FPS com movimento livre
-    Matriz Projeção: Perspectiva configurável com FOV dinâmico
+## Dependências
 
-3. Sistema de Iluminação Phong
+- OpenGL 3.3+
+- GLFW 3
+- GLM
+- GLAD (precisa gerar — veja abaixo)
 
-    Luz Direcional: Simula fonte de luz distante (sol)
-    Luzes Pontuais: Múltiplas fontes com atenuação baseada em distância
-    Componentes: Ambiente, difusa e especular
-    Blinn-Phong: Reflexos especulares otimizados
+### Instalando no Ubuntu/Debian
 
-4. Geometria Procedural
-
-    Cubo: Primitiva básica com 6 faces
-    Esfera: Gerada via coordenadas esféricas (latitude/longitude)
-    Plano: Subdividido para demonstrar tesselação
-
-5. Sistema de Câmera
-
-    Movimento WASD (frente, trás, esquerda, direita)
-    Espaço/Shift (subir/descer)
-    Rotação via mouse
-    Zoom via scroll
-
-6. Materiais
-
-    Metálico (alto brilho especular)
-    Plástico (baixo brilho especular)
-    Padrão (brilho médio)
-
-
-Dependências
-
-    OpenGL 3.3+: API gráfica
-    GLFW 3: Gerenciamento de janelas e entrada
-    GLM: Biblioteca de matemática para gráficos
-    GLAD: Carregador de funções OpenGL
-
-Instalação das Dependências
-Ubuntu/Debian
-bash
-
+```bash
 sudo apt-get update
-sudo apt-get install build-essential cmake
-sudo apt-get install libglfw3-dev libglm-dev
+sudo apt-get install build-essential cmake libglfw3-dev libglm-dev
+```
 
-macOS (Homebrew)
-bash
+### macOS
 
+```bash
 brew install cmake glfw glm
+```
 
-Windows (MSYS2/MinGW)
-bash
+## Compilando
 
-pacman -S mingw-w64-x86_64-cmake
-pacman -S mingw-w64-x86_64-glfw
-pacman -S mingw-w64-x86_64-glm
+### 1. Gerar o GLAD
 
-Compilação
-Gerar GLAD
+Acesse https://glad.dav1d.de/ e configure:
+- Language: C/C++
+- Specification: OpenGL
+- API gl: 3.3 (Core)
+- Marque "Generate a loader"
 
-    Acesse https://glad.dav1d.de/
-    Configurações:
-        Language: C/C++
-        Specification: OpenGL
-        API gl: Version 3.3+
-        Profile: Core
-    Marque "Generate a loader"
-    Clique em "GENERATE"
-    Baixe o arquivo zip
-    Extraia glad.c para glad/src/
-    Extraia glad/glad.h e KHR/khrplatform.h para glad/include/
+Extraia o zip e copie os arquivos para:
+- `glad.c` → `glad/src/`
+- `glad.h` e `khrplatform.h` → `glad/include/`
 
-Compilar o Projeto
-bash
+### 2. Compilar
 
+```bash
 mkdir build
 cd build
 cmake ..
 make
+```
 
-Executar
-bash
+### 3. Executar
 
+```bash
 ./SistemaVisualizacaoGrafica
+```
 
-Controles
-Tecla	Ação
-W	Mover câmera para frente
-S	Mover câmera para trás
-A	Mover câmera para esquerda
-D	Mover câmera para direita
-Espaço	Subir
-Shift	Descer
-Mouse	Rotacionar visão
-Scroll	Zoom (ajustar FOV)
-L	Alternar iluminação on/off
-F	Alternar modo wireframe
-ESC	Sair da aplicação
-Arquitetura Técnica
-Sistema de Shaders
+> Execute sempre de dentro de `build/` após copiar a pasta `shaders/` para lá, ou volte para o diretório raiz antes de rodar.
 
-A classe Shader encapsula:
+## Controles
 
-    Leitura de arquivos GLSL
-    Compilação de vertex e fragment shaders
-    Linkagem em programa
-    Tratamento de erros com logs detalhados
-    Funções utilitárias para definir uniforms
+| Tecla | Ação |
+|-------|------|
+| W / S | Frente / Trás |
+| A / D | Esquerda / Direita |
+| Espaço / Shift | Subir / Descer |
+| Mouse | Rotacionar câmera |
+| Scroll | Ajustar FOV |
+| L | Liga/desliga iluminação |
+| F | Alterna wireframe |
+| ESC | Sair |
 
-Sistema de Câmera
+## Estrutura do projeto
 
-Implementa câmera FPS usando:
+```
+├── src/
+│   ├── main.cpp       # loop principal e callbacks
+│   ├── Shader.h       # carrega e compila shaders GLSL
+│   ├── Camera.h       # câmera FPS com ângulos de Euler
+│   ├── Mesh.h         # cubo, esfera e plano procedurais
+│   └── Light.h        # estruturas de luz e material
+├── shaders/
+│   ├── vertexShader.glsl
+│   ├── fragmentShader.glsl
+│   ├── lightingVert.glsl
+│   └── lightingFrag.glsl
+├── CMakeLists.txt
+└── Makefile
+```
 
-    Ângulos de Euler (yaw, pitch)
-    Matriz LookAt para transformação view
-    Vetores ortonormais (frente, direita, cima)
-    Limitação de pitch para evitar gimbal lock
+## Resolução de problemas
 
-Sistema de Geometria
+**Tela preta:** verifique se os shaders estão sendo encontrados (pasta `shaders/` acessível no diretório de execução) e se GLAD foi inicializado corretamente.
 
-Classes para criação procedural:
+**Objetos não aparecem:** cheque a posição da câmera e as matrizes de transformação. Um objeto pode estar atrás da câmera ou fora do frustum.
 
-    Vertice: Estrutura com posição, normal e coordenadas de textura
-    Mesh: Classe base com VAO/VBO/EBO
-    Cubo: 24 vértices (4 por face para normais corretas)
-    Esfera: Geração via parametrização esférica
-    Plano: Grid subdividido
+**Iluminação estranha:** normais precisam ser renormalizadas no fragment shader após interpolação. Veja `lightingFrag.glsl`.
 
-Sistema de Iluminação
+## Referências
 
-Modelo Phong implementado:
-
-    Luz Ambiente: Iluminação base constante
-    Luz Difusa: Baseada no ângulo entre normal e direção da luz
-    Luz Especular: Reflexos usando Blinn-Phong (half-vector)
-    Atenuação: Para luzes pontuais (constante + linear + quadrática)
-
-Equação de atenuação:
-
-atenuacao = 1.0 / (Kc + Kl * d + Kq * d²)
-
-Onde:
-
-    Kc = constante
-    Kl = linear
-    Kq = quadrática
-    d = distância da luz
-
-Detalhes de Implementação
-Pipeline de Renderização
-
-    Limpar buffers: Color e depth
-    Configurar shader: Ativar programa
-    Definir uniforms: Matrizes, luzes, materiais
-    Para cada objeto:
-        Calcular matriz modelo
-        Enviar matriz para shader
-        Configurar material
-        Desenhar geometria
-    Swap buffers: Apresentar frame
-
-Cálculo de Normais
-
-Para o cubo, cada face tem vértices duplicados para permitir normais corretas por face (flat shading nas arestas).
-
-Para a esfera, normais são calculadas como vetores unitários da origem até cada vértice:
-cpp
-
-normal = normalize(posicao - centro)
-
-Transformações
-
-Ordem de multiplicação de matrizes:
-
-gl_Position = projecao * visao * modelo * vec4(posicao, 1.0)
-
-A matriz normal é calculada para evitar distorções:
-cpp
-
-matrizNormal = transpose(inverse(matrizModelo))
-
-Extensões Possíveis
-
-    Texturização com imagens
-    Shadow mapping para sombras
-    Normal mapping para detalhes de superfície
-    Skybox para ambiente
-    Geometrias adicionais (cilindro, cone, toro)
-    Animações por keyframes
-    Sistema de partículas
-    Post-processing effects
-    Frustum culling
-    LOD (Level of Detail)
-
-Resolução de Problemas
-Tela preta
-
-    Verificar se os shaders compilaram corretamente (checar console)
-    Verificar se GLAD foi inicializado
-    Verificar se o depth test está habilitado
-
-Objetos não aparecem
-
-    Verificar posição da câmera
-    Verificar matrizes de transformação
-    Verificar se VAO está sendo bound antes do draw
-
-Iluminação incorreta
-
-    Verificar cálculo de normais
-    Verificar se normais estão sendo normalizadas no shader
-    Verificar posições das luzes
-
-Performance baixa
-
-    Reduzir subdivisões das geometrias
-    Reduzir número de luzes pontuais
-    Usar face culling: glEnable(GL_CULL_FACE)
-
-Referências
-
-    Real-Time Rendering, 4th Edition (Akenine-Möller et al.)
-    Learn OpenGL (Joey de Vries) - learnopengl.com
-    OpenGL Programming Guide (Red Book)
-    Computer Graphics: Principles and Practice (Hughes et al.)
-
-Licença
-
-Este projeto é desenvolvido para fins educacionais.
-
-
+- [Learn OpenGL](https://learnopengl.com/) — Joey de Vries
+- *Real-Time Rendering*, 4ª ed. — Akenine-Möller et al.
+- [docs.gl](https://docs.gl/) — referência da API OpenGL

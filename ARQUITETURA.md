@@ -1,229 +1,151 @@
-Documentação da Arquitetura
-Visão Geral do Sistema
+# Arquitetura do Sistema
 
-Este documento descreve em detalhes a arquitetura e implementação do Sistema de Visualização Gráfica 3D, explicando as decisões de design e os conceitos de computação gráfica aplicados.
-1. Pipeline Gráfico
-1.1 Estágio de Aplicação (CPU)
+Documentação técnica do Sistema de Visualização Gráfica 3D.
 
-Responsabilidades:
+---
 
-    Processamento de entrada (teclado, mouse)
-    Lógica da cena (animações, física)
-    Culling e otimizações
-    Preparação de dados para GPU
+## 1. Pipeline Gráfico
 
-Implementação:
-cpp
+### Estágio de Aplicação (CPU)
 
-// Loop principal em main.cpp
+O loop principal em `main.cpp` segue o padrão clássico:
+
+```cpp
 while (!glfwWindowShouldClose(janela)) {
-    processarEntrada(janela);           // Input
-    atualizarLogica(deltaTime);         // Lógica
-    renderizar();                       // Enviar para GPU
-    glfwSwapBuffers(janela);           // Apresentar
+    processarEntrada(janela);           // input
+    atualizarLogica(deltaTime);         // lógica da cena
+    renderizar();                       // envia para GPU
+    glfwSwapBuffers(janela);           // apresenta frame
 }
+```
 
-1.2 Estágio de Processamento Geométrico (GPU)
+### Vertex Shader
 
-Vertex Shader (lightingVert.glsl):
+Cada vértice passa pela transformação completa Local → Mundo → Câmera → Clip:
 
-Processa cada vértice individualmente:
-glsl
-
-// Transformação completa: Local -> Mundo -> Visão -> Clip
+```glsl
 gl_Position = projecao * visao * modelo * vec4(posicao, 1.0);
 
-// Transformar normal para espaço do mundo
+// normais precisam de tratamento especial em caso de escala não-uniforme
 normalFragmento = mat3(transpose(inverse(modelo))) * normal;
+```
 
-Matriz Normal: A matriz normal é necessária para transformar normais corretamente quando há escala não-uniforme:
+A matriz normal (`transpose(inverse(modelo))`) é necessária porque escala não-uniforme distorce vetores direcionais — sem ela as normais ficam erradas nas arestas.
 
-MatrizNormal = transpose(inverse(MatrizModelo))
+### Rasterização
 
-Por quê?
+Feita automaticamente pela GPU: clipping, divisão de perspectiva, conversão de triângulos em fragmentos e interpolação de atributos (normais, UVs, etc.).
 
-    Normais são vetores direcionais (w=0)
-    Escala não-uniforme distorce normais
-    A matriz normal preserva ortogonalidade
+### Fragment Shader
 
-1.3 Estágio de Rasterização
+Calcula a cor final de cada pixel com o modelo de iluminação Phong.
 
-Executado automaticamente pela GPU:
+---
 
-    Clipping (frustrums)
-    Divisão de perspectiva (w-division)
-    Viewport transform
-    Scanline conversion (primitiva → fragmentos)
-    Interpolação de atributos (normais, cores, UV)
+## 2. Sistema de Coordenadas
 
-1.4 Estágio de Processamento de Fragmentos
+As transformações acontecem em cascata:
 
-Fragment Shader (lightingFrag.glsl):
+```
+Local Space   →[modelo]→   World Space
+World Space   →[visão]→    View Space
+View Space    →[projeção]→  Clip Space
+Clip Space    →[GPU]→       NDC → Screen Space
+```
 
-Calcula cor final de cada pixel usando modelo de iluminação Phong.
-2. Sistema de Coordenadas
-2.1 Transformações de Espaço
+### Matriz Modelo
 
-Local Space (Modelo)
-    ↓ [Matriz Modelo]
-World Space (Mundo)
-    ↓ [Matriz Visão]
-View Space (Câmera)
-    ↓ [Matriz Projeção]
-Clip Space
-    ↓ [Perspective Division]
-NDC (Normalized Device Coordinates)
-    ↓ [Viewport Transform]
-Screen Space (Pixels)
-
-2.2 Matriz Modelo
-
-Combina transformações:
-cpp
-
+```cpp
 glm::mat4 modelo = glm::mat4(1.0f);
-modelo = glm::translate(modelo, posicao);    // Translação
-modelo = glm::rotate(modelo, angulo, eixo);  // Rotação
-modelo = glm::scale(modelo, escala);         // Escala
+modelo = glm::translate(modelo, posicao);
+modelo = glm::rotate(modelo, angulo, eixo);
+modelo = glm::scale(modelo, escala);
+// ordem: Scale → Rotate → Translate
+```
 
-Ordem importa! SRT (Scale → Rotate → Translate)
-2.3 Matriz Visão
+### Matriz Visão (LookAt)
 
-Implementada com LookAt:
-cpp
-
+```cpp
 glm::mat4 visao = glm::lookAt(
-    posicaoCamera,              // Olho
-    posicaoCamera + direcao,    // Alvo
-    vetorCima                   // Cima
+    posicaoCamera,
+    posicaoCamera + direcao,
+    vetorCima
 );
+```
 
-LookAt constrói base ortonormal:
+LookAt constrói uma base ortonormal: z = direção oposta ao olhar, x = direita, y = cima.
 
-    Direção: z = normalize(olho - alvo)
-    Direita: x = normalize(cross(cima, z))
-    Cima: y = cross(z, x)
+### Matriz Projeção
 
-2.4 Matriz Projeção
-
-Perspectiva:
-cpp
-
+```cpp
 glm::mat4 proj = glm::perspective(
-    glm::radians(fov),    // Campo de visão
-    aspectRatio,          // Largura/altura
-    near,                 // Plano próximo
-    far                   // Plano distante
+    glm::radians(fov),
+    aspectRatio,
+    near,
+    far
 );
+```
 
-Cria frustum que mapeia espaço 3D visível para cubo NDC [-1,1]³.
-3. Sistema de Iluminação
-3.1 Modelo de Iluminação Phong
+Mapeia o frustum visível para o cubo NDC [-1, 1]³.
 
-Composto por três componentes:
+---
 
-1. Componente Ambiente (Ia):
-glsl
+## 3. Iluminação Phong
 
+### Componentes
+
+**Ambiente** — iluminação base, simula luz indireta:
+```glsl
 vec3 ambiente = luz.ambiente * material.ambiente;
+```
 
-Iluminação base constante, simula luz indireta.
-
-2. Componente Difusa (Id):
-glsl
-
+**Difusa** — proporcional ao ângulo entre a normal e a direção da luz (Lei de Lambert):
+```glsl
 vec3 direcaoLuz = normalize(luz.posicao - posicaoFragmento);
 float diff = max(dot(normal, direcaoLuz), 0.0);
 vec3 difusa = luz.difusa * diff * material.difusa;
+```
 
-Lei de Lambert: intensidade proporcional ao cosseno do ângulo entre normal e luz.
-
-3. Componente Especular (Is):
-glsl
-
-// Blinn-Phong usando half-vector
+**Especular** — reflexos usando Blinn-Phong (half-vector é mais eficiente que `reflect()`):
+```glsl
 vec3 halfVector = normalize(direcaoLuz + direcaoVisao);
 float spec = pow(max(dot(normal, halfVector), 0.0), brilho);
 vec3 especular = luz.especular * spec * material.especular;
+```
 
-Equação Final:
+Cor final: `I = ambiente + difusa + especular`
 
-I = Ia + Id + Is
-I = Ka*La + Kd*Ld*(N·L) + Ks*Ls*(H·N)^n
+### Atenuação para Luzes Pontuais
 
-Onde:
+```glsl
+float dist = length(luz.posicao - fragmento);
+float atenuacao = 1.0 / (Kc + Kl*dist + Kq*dist*dist);
+```
 
-    K = coeficiente do material
-    L = intensidade da luz
-    N = normal
-    L = direção da luz
-    H = half-vector
-    n = brilho (shininess)
+Parâmetros usados: Kc = 1.0, Kl = 0.09, Kq = 0.032.
 
-3.2 Atenuação para Luzes Pontuais
-glsl
+---
 
-float distancia = length(luz.posicao - fragmento);
-float atenuacao = 1.0 / (Kc + Kl*d + Kq*d²);
+## 4. Geometria Procedural
 
-Parâmetros típicos:
+### Estrutura de Vértice
 
-    Kc = 1.0 (constante)
-    Kl = 0.09 (linear)
-    Kq = 0.032 (quadrática)
-
-Simula queda natural da intensidade com distância.
-3.3 Blinn-Phong vs Phong Clássico
-
-Phong Clássico:
-glsl
-
-vec3 reflexao = reflect(-direcaoLuz, normal);
-float spec = pow(max(dot(reflexao, direcaoVisao), 0.0), brilho);
-
-Blinn-Phong (usado no projeto):
-glsl
-
-vec3 halfVector = normalize(direcaoLuz + direcaoVisao);
-float spec = pow(max(dot(halfVector, normal), 0.0), brilho);
-
-Vantagens Blinn-Phong:
-
-    Mais eficiente (evita reflect)
-    Melhor comportamento em ângulos rasantes
-    Amplamente usado na indústria
-
-4. Geometria Procedural
-4.1 Estrutura de Vértice
-cpp
-
+```cpp
 struct Vertice {
-    glm::vec3 posicao;       // Coordenadas 3D
-    glm::vec3 normal;        // Vetor normal
-    glm::vec2 coordTextura;  // Coordenadas UV
+    glm::vec3 posicao;
+    glm::vec3 normal;
+    glm::vec2 coordTextura;
 };
+// 8 floats * 4 bytes = 32 bytes por vértice
+```
 
-Total: 8 floats * 4 bytes = 32 bytes por vértice
-4.2 Buffer Objects
+### Buffer Objects
 
-VBO (Vertex Buffer Object):
+- **VBO** — dados dos vértices na VRAM
+- **EBO** — índices para reuso de vértices
+- **VAO** — encapsula a configuração de atributos, facilita troca entre geometrias
 
-    Armazena dados de vértices na GPU
-    GL_STATIC_DRAW: dados não mudam
-    GL_DYNAMIC_DRAW: dados atualizam frequentemente
-
-EBO (Element Buffer Object):
-
-    Armazena índices para reuso de vértices
-    Reduz memória (compartilha vértices)
-
-VAO (Vertex Array Object):
-
-    Encapsula configuração de atributos
-    Permite trocar entre geometrias rapidamente
-
-cpp
-
+```cpp
 glGenVertexArrays(1, &VAO);
 glGenBuffers(1, &VBO);
 glGenBuffers(1, &EBO);
@@ -232,314 +154,126 @@ glBindVertexArray(VAO);
 glBindBuffer(GL_ARRAY_BUFFER, VBO);
 glBufferData(GL_ARRAY_BUFFER, tamanho, dados, GL_STATIC_DRAW);
 
-// Configurar atributos
 glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, stride, offset);
 glEnableVertexAttribArray(0);
+```
 
-4.3 Geração de Esfera
+### Geração da Esfera
 
-Usa coordenadas esféricas (θ, φ) → (x, y, z):
-cpp
+Usa parametrização esférica (θ = azimutal, φ = polar):
 
-x = raio * cos(φ) * cos(θ)
-y = raio * cos(φ) * sin(θ)
-z = raio * sin(φ)
+```
+x = r * cos(φ) * cos(θ)
+y = r * cos(φ) * sin(θ)
+z = r * sin(φ)
+```
 
-Onde:
+Para esfera centrada na origem, a normal é simplesmente `normalize(posicao)`.
 
-    θ (theta): ângulo azimutal [0, 2π]
-    φ (phi): ângulo polar [-π/2, π/2]
+### Topologia
 
-Normais: Para esfera centrada na origem, normal = normalize(posicao)
+| Geometria | Vértices | Índices |
+|-----------|----------|---------|
+| Cubo | 24 (4 por face, normais por face) | 36 |
+| Esfera | (segs+1)×(pilhas+1) | segs×pilhas×6 |
+| Plano | (divX+1)×(divZ+1) | divX×divZ×6 |
 
-Coordenadas UV:
-cpp
+---
 
-u = θ / (2π)
-v = (φ + π/2) / π
+## 5. Câmera FPS
 
-4.4 Topologia de Malha
+### Ângulos de Euler
 
-Cubo:
+```cpp
+direcao.x = cos(yaw) * cos(pitch);
+direcao.y = sin(pitch);
+direcao.z = sin(yaw) * cos(pitch);
+```
 
-    24 vértices (4 por face)
-    36 índices (6 faces * 2 triângulos * 3 vértices)
-    Vértices duplicados para normais por face
+Pitch limitado a ±89° para evitar gimbal lock.
 
-Esfera:
+### Base Ortonormal
 
-    (setores + 1) * (pilhas + 1) vértices
-    setores * pilhas * 6 índices
-    Grid latitude-longitude
+```cpp
+frente  = normalize(direcao);
+direita = normalize(cross(frente, cimaMundial));
+cima    = normalize(cross(direita, frente));
+```
 
-Plano:
+Esses três vetores são recalculados a cada frame conforme o mouse se move.
 
-    (divX + 1) * (divZ + 1) vértices
-    divX * divZ * 6 índices
-    Grid regular subdividido
+---
 
-5. Sistema de Câmera
-5.1 Câmera FPS
+## 6. Shaders
 
-Baseada em ângulos de Euler:
-cpp
+### Entradas do Vertex Shader
 
-// Yaw: rotação em torno de Y (esquerda/direita)
-// Pitch: rotação em torno de X (cima/baixo)
-
-direcao.x = cos(yaw) * cos(pitch)
-direcao.y = sin(pitch)
-direcao.z = sin(yaw) * cos(pitch)
-
-5.2 Prevenção de Gimbal Lock
-
-Limitamos pitch:
-cpp
-
-if (pitch > 89.0f) pitch = 89.0f;
-if (pitch < -89.0f) pitch = -89.0f;
-
-Isso evita que a câmera vire de cabeça para baixo.
-5.3 Base Ortonormal
-
-Mantemos três vetores perpendiculares:
-cpp
-
-frente = normalize(direcao)
-direita = normalize(cross(frente, cimaMundial))
-cima = normalize(cross(direita, frente))
-
-5.4 Movimento Relativo
-cpp
-
-// Frente/trás ao longo da direção da câmera
-posicao += frente * velocidade
-
-// Esquerda/direita perpendicular
-posicao += direita * velocidade
-
-// Cima/baixo ao longo do eixo Y mundial
-posicao += cimaMundial * velocidade
-
-6. Shaders GLSL
-6.1 Vertex Shader
-
-Entrada (per-vertex):
-glsl
-
+```glsl
 layout (location = 0) in vec3 posicao;
 layout (location = 1) in vec3 normal;
 layout (location = 2) in vec2 coordTextura;
 
-Saída (interpolada para fragment shader):
-glsl
-
-out vec3 posicaoFragmento;
-out vec3 normalFragmento;
-out vec2 coordTextura;
-
-Uniforms (constantes):
-glsl
-
 uniform mat4 modelo;
 uniform mat4 visao;
 uniform mat4 projecao;
+```
 
-6.2 Fragment Shader
+### Saída do Fragment Shader
 
-Entrada (interpolada):
-glsl
+```glsl
+out vec4 corFinal;
+```
 
-in vec3 posicaoFragmento;
-in vec3 normalFragmento;
-
-Saída:
-glsl
-
-out vec4 corFinal;  // RGBA
-
-6.3 Interpolação de Atributos
-
-GPU interpola atributos automaticamente:
-
-Para triângulo com vértices V0, V1, V2 e pesos baricêntricos (α, β, γ):
-
-atributo_fragmento = α*V0 + β*V1 + γ*V2
-
-Normais interpoladas devem ser renormalizadas:
-glsl
-
+Normais interpoladas pela GPU precisam ser renormalizadas antes do cálculo de iluminação:
+```glsl
 vec3 normal = normalize(normalFragmento);
+```
 
-7. Otimizações
-7.1 Face Culling
-cpp
+---
 
+## 7. Otimizações
+
+**Face culling** — descarta faces traseiras (~50% dos fragmentos):
+```cpp
 glEnable(GL_CULL_FACE);
-glCullFace(GL_BACK);        // Cullar faces traseiras
-glFrontFace(GL_CCW);        // Counter-clockwise = frente
+glCullFace(GL_BACK);
+glFrontFace(GL_CCW);
+```
 
-Economiza ~50% dos fragmentos processados.
-7.2 Depth Testing
-cpp
-
+**Depth test** — Z-buffer resolve visibilidade corretamente:
+```cpp
 glEnable(GL_DEPTH_TEST);
-glDepthFunc(GL_LESS);       // Desenha se z < z_buffer
+glDepthFunc(GL_LESS);
+```
 
-Z-buffer resolve visibilidade, evita sobreposições incorretas.
-7.3 Early-Z
+GPUs modernas fazem Early-Z, descartando fragmentos ocultos antes mesmo do fragment shader.
 
-GPU moderna testa profundidade antes do fragment shader, descartando fragmentos ocultos.
-7.4 Instancing (não implementado, mas útil)
+---
 
-Para múltiplas cópias do mesmo objeto:
-cpp
+## 8. Debugging
 
-glDrawElementsInstanced(GL_TRIANGLES, count, GL_UNSIGNED_INT, 0, numInstancias);
+Algumas técnicas úteis durante desenvolvimento:
 
-8. Fluxo de Dados
+```glsl
+// Visualizar normais
+corFinal = vec4(normal * 0.5 + 0.5, 1.0);
 
-CPU                                GPU
-───────────────────────────────────────────────
-Criar geometria
-  └─> VBO/EBO/VAO ─────────────> VRAM
+// Visualizar profundidade
+corFinal = vec4(vec3(gl_FragCoord.z), 1.0);
+```
 
-Configurar shaders
-  └─> Uniforms ─────────────────> Registros
-
-Por frame:
-  Update lógica
-  Calcular matrizes
-  └─> glUniform ────────────────> Shader uniforms
-  └─> glDrawElements ───────────> Vertex Shader
-                                    ↓
-                                  Rasterizer
-                                    ↓
-                                  Fragment Shader
-                                    ↓
-                                  Framebuffer
-  
-glfwSwapBuffers ←────────────────  Apresentar
-
-9. Espaço de Cores e Gamma
-
-Cores são em espaço linear durante cálculos:
-glsl
-
-vec3 resultado = ambiente + difusa + especular;
-
-Para display correto, converter para sRGB (gamma 2.2):
-glsl
-
-corFinal = vec4(pow(resultado, vec3(1.0/2.2)), 1.0);
-
-(Não implementado no projeto básico)
-10. Extensibilidade
-10.1 Adicionar Texturas
-cpp
-
-// No Mesh.h
-GLuint texturaID;
-
-// No shader
-uniform sampler2D texturaDifusa;
-vec3 corTextura = texture(texturaDifusa, coordTextura).rgb;
-
-10.2 Shadow Mapping
-
-    Renderizar cena do ponto de vista da luz → depth map
-    No shader principal, comparar profundidade do fragmento com depth map
-    Se maior, está na sombra
-
-10.3 Normal Mapping
-glsl
-
-vec3 normalTangente = texture(normalMap, UV).rgb * 2.0 - 1.0;
-vec3 normal = TBN * normalTangente;
-
-Requer matriz TBN (Tangent-Bitangent-Normal).
-11. Considerações de Performance
-11.1 CPU-GPU Sincronização
-
-Evitar:
-cpp
-
-glReadPixels()  // Força sync
-glFinish()      // Espera GPU terminar
-
-Preferir pipeline assíncrono.
-11.2 State Changes
-
-Minimizar mudanças de estado:
-
-    Agrupar objetos por shader
-    Agrupar por textura
-    Usar UBOs para uniforms compartilhados
-
-11.3 Batch Rendering
-
-Combinar múltiplos objetos em um draw call:
-cpp
-
-glDrawElementsInstanced()  // Melhor que loop de glDrawElements()
-
-12. Matemática Vetorial
-12.1 Produto Escalar (Dot Product)
-
-A · B = |A| |B| cos(θ)
-
-Usos:
-
-    Calcular ângulo entre vetores
-    Projeção
-    Teste de orientação
-
-12.2 Produto Vetorial (Cross Product)
-
-A × B = vetor perpendicular a A e B
-|A × B| = |A| |B| sin(θ)
-
-Usos:
-
-    Calcular normal de superfície
-    Construir base ortonormal
-    Determinar "lado" (regra da mão direita)
-
-12.3 Normalização
-
-v_norm = v / |v|
-
-Essencial para:
-
-    Direções (lighting)
-    Normais
-    Vetores de câmera
-
-13. Debugging
-13.1 Visualizar Normais
-glsl
-
-corFinal = vec4(normal * 0.5 + 0.5, 1.0);  // Mapear [-1,1] para [0,1]
-
-13.2 Visualizar Profundidade
-glsl
-
-float depth = gl_FragCoord.z;
-corFinal = vec4(vec3(depth), 1.0);
-
-13.3 Wireframe Mode
-cpp
-
+```cpp
+// Wireframe
 glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+```
 
-Conclusão
+---
 
-Este sistema demonstra a implementação completa de um pipeline gráfico 3D moderno, integrando:
+## 9. Extensibilidade
 
-    Transformações matemáticas
-    Geometria procedural
-    Iluminação física
-    Interatividade em tempo real
+Algumas extensões naturais a partir desta base:
 
-A arquitetura modular permite extensão para recursos avançados como texturas, sombras e pós-processamento.
-
+- **Texturas:** adicionar `sampler2D` no fragment shader e coordenadas UV nos vértices
+- **Shadow mapping:** renderizar a cena do ponto de vista da luz, gerar depth map, comparar no shader principal
+- **Normal mapping:** precisaria da matriz TBN (Tangent-Bitangent-Normal) por vértice
+- **Instancing:** `glDrawElementsInstanced()` para múltiplas cópias sem custo de draw call por objeto
